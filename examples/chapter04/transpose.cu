@@ -14,7 +14,8 @@ void initialData(float *in,  const int size)
 {
     for (int i = 0; i < size; i++)
     {
-        in[i] = (float)( rand() & 0xFF ) / 10.0f; //100.0f;
+        // in[i] = (float)( rand() & 0xFF ) / 10.0f; //100.0f;
+        in[i] = (float)(i);
     }
 
     return;
@@ -77,6 +78,8 @@ __global__ void warmup(float *out, float *in, const int nx, const int ny)
 }
 
 // case 0 copy kernel: access data in rows
+// in: [ny, nx], out: [ny, nx]
+// in[iy, ix] -> out[iy, ix]
 __global__ void copyRow(float *out, float *in, const int nx, const int ny)
 {
     unsigned int ix = blockDim.x * blockIdx.x + threadIdx.x;
@@ -84,11 +87,14 @@ __global__ void copyRow(float *out, float *in, const int nx, const int ny)
 
     if (ix < nx && iy < ny)
     {
+        printf("copyRow [%d, %d] = %f \n", iy, ix, in[iy * nx + ix]);
         out[iy * nx + ix] = in[iy * nx + ix];
     }
 }
 
 // case 1 copy kernel: access data in columns
+// in: [nx, ny], out: [nx, ny]
+// in[ix, iy] -> out[ix, iy]
 __global__ void copyCol(float *out, float *in, const int nx, const int ny)
 {
     unsigned int ix = blockDim.x * blockIdx.x + threadIdx.x;
@@ -96,6 +102,7 @@ __global__ void copyCol(float *out, float *in, const int nx, const int ny)
 
     if (ix < nx && iy < ny)
     {
+      printf("copyCol [%d, %d] = %f \n", ix, iy, in[ix * ny + iy]);
         out[ix * ny + iy] = in[ix * ny + iy];
     }
 }
@@ -246,9 +253,13 @@ int main(int argc, char **argv)
 
     // initialize host array
     initialData(h_A, nx * ny);
+    printf("h_A is: \n");
+    printData(h_A, nx*ny);
 
     // transpose at host side
-    transposeHost(hostRef, h_A, nx, ny);
+    transposeHost(hostRef, h_A, nx, ny);  // hostRef [nx, ny]
+    printf("hostRef is: \n");
+    printData(hostRef, nx*ny);
 
     // allocate device memory
     float *d_A, *d_C;
@@ -330,10 +341,12 @@ int main(int argc, char **argv)
     CHECK(cudaGetLastError());
 
     // check kernel results
-    if (iKernel > 1)
+    if (iKernel >= 0)
     {
         CHECK(cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost));
         checkResult(hostRef, gpuRef, nx * ny, 1);
+        printf("gpuRef is: \n");
+        printData(gpuRef, nx*ny);
     }
 
     // free host and device memory
