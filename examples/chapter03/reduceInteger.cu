@@ -226,6 +226,7 @@ __global__ void reduceUnrolling8 (int *g_idata, int *g_odata, unsigned int n)
     if (tid == 0) g_odata[blockIdx.x] = idata[0];
 }
 
+// 从A30上评测看, reduceUnrollWarps8 性能不如 reduceUnroll8好
 __global__ void reduceUnrollWarps8 (int *g_idata, int *g_odata, unsigned int n)
 {
     // set thread ID
@@ -264,9 +265,9 @@ __global__ void reduceUnrollWarps8 (int *g_idata, int *g_odata, unsigned int n)
     }
 
     // unrolling warp
-    if (tid < 32)
+    if (tid < 32)  // 一个warp内, 由于SIMT, 每次指令后意味着会有隐式的warp内同步, 可以减少8次__syncthreads调用
     {
-        volatile int *vmem = idata;
+        volatile int *vmem = idata;  // volatile, which tells the compiler that it must store vmem[tid] back to global memory with every assignment.
         vmem[tid] += vmem[tid + 32];
         vmem[tid] += vmem[tid + 16];
         vmem[tid] += vmem[tid +  8];

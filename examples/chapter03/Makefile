@@ -1,11 +1,10 @@
-CU_APPS=nestedHelloWorld nestedReduce nestedReduce2 nestedReduceNosync \
-	    reduceInteger simpleDeviceQuery simpleDivergence sumMatrix
+CU_APPS=reduceInteger simpleDeviceQuery simpleDivergence sumMatrix
 C_APPS=
 
 all: ${C_APPS} ${CU_APPS}
 
 %: %.cu
-	nvcc -O2 -arch=sm_35 -o $@ $< -lcudadevrt --relocatable-device-code true
+	nvcc -O2 -arch=sm_80 -o $@ $<
 %: %.c
 	gcc -O2 -std=c99 -o $@ $<
 clean:

@@ -107,7 +107,26 @@ __global__ void copyCol(float *out, float *in, const int nx, const int ny)
     }
 }
 
+
+// case 1 copy kernel: access data in columns
+// in: [ny, nx], out: [ny, nx]
+// in[iy, ix] -> out[iy, ix]
+__global__ void copyColModify(float *out, float *in, const int nx, const int ny)
+{
+    unsigned int ix = blockDim.x * blockIdx.x + threadIdx.x;
+    unsigned int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (ix < nx && iy < ny)
+    {
+      printf("copyCol [%d, %d] = %f \n", ix, iy, in[ix * ny + iy]);
+        out[ix * ny + iy] = in[ix * ny + iy];
+    }
+}
+
+
 // case 2 transpose kernel: read in rows and write in columns
+// in: [ny, nx],  out: [nx, ny]
+// in[iy, ix] -> out[ix, iy]
 __global__ void transposeNaiveRow(float *out, float *in, const int nx,
                                   const int ny)
 {

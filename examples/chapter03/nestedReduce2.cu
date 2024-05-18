@@ -57,6 +57,31 @@ __global__ void reduceNeighbored (int *g_idata, int *g_odata, unsigned int n)
     if (tid == 0) g_odata[blockIdx.x] = idata[0];
 }
 
+/*
+问题:
+初始2048个block, 每个block 512 thread, 所以每个block会触发8次child调用, 分别是
+    gpuRecursiveReduce<<<1, 256>>>
+    gpuRecursiveReduce<<<1, 128>>>
+    gpuRecursiveReduce<<<1, 64>>>
+    gpuRecursiveReduce<<<1, 32>>>
+    gpuRecursiveReduce<<<1, 16>>>
+    gpuRecursiveReduce<<<1, 8>>>
+    gpuRecursiveReduce<<<1, 4>>>
+    gpuRecursiveReduce<<<1, 2>>>
+总共child调用共 2048 * 8 = 16384 次
+
+__syncthreads, cudaDeviceSynchronize调用开销明显, 但实际并不需要, 因为:
+如果用户没有进行显式同步, 自动也会在有隐式同步, 保证: child开始launch, 结束时和parent的内存状态具有一致性.
+
+
+1. Parent and child grids have concurrent access to global memory, with weak
+consistency guarantees between child and parent. There are two points in the execution of a child grid
+when its view of memory is fully consistent with the parent thread: at the start of a child grid, and
+when the child grid completes.
+
+2. When a child grid is invoked, its view of memory is fully consistent with the parent thread
+*/
+
 __global__ void gpuRecursiveReduce (int *g_idata, int *g_odata,
                                     unsigned int isize)
 {
@@ -84,7 +109,7 @@ __global__ void gpuRecursiveReduce (int *g_idata, int *g_odata,
     }
 
     // sync at block level
-    __syncthreads();
+    __syncthreads();  // 不同需要了
 
     // nested invocation to generate child grids
     if(tid == 0)
@@ -92,13 +117,21 @@ __global__ void gpuRecursiveReduce (int *g_idata, int *g_odata,
         gpuRecursiveReduce<<<1, istride>>>(idata, odata, istride);
 
         // sync all child grids launched in this block
-        cudaDeviceSynchronize();
+        cudaDeviceSynchronize();  // 不需要了
     }
 
     // sync at block level again
-    __syncthreads();
+    __syncthreads();  // 不需要了, 所有child完成才算完成, child完成后
 }
 
+/*
+问题:
+2048个block, 共触发2048 * 8 = 16384 次child调用, 调用次数过多
+
+方案:
+可以增大child kernel的block数, 减少child kerel的个数
+
+*/
 __global__ void gpuRecursiveReduceNosync (int *g_idata, int *g_odata,
         unsigned int isize)
 {
@@ -130,6 +163,13 @@ __global__ void gpuRecursiveReduceNosync (int *g_idata, int *g_odata,
     }
 }
 
+/*
+只有第一个block会产生8个child kernel
+
+???
+疑问: gpuRecursiveReduce2 会有多个block, 与parent的block数量一致, 如果保在blockIdx.x == 0中launch, 
+却依赖其它block中的 `idata[threadIdx.x] += idata[threadIdx.x + iStride];` 执行结果, 会有问题吗?
+*/
 __global__ void gpuRecursiveReduce2(int *g_idata, int *g_odata, int iStride,
                                     int const iDim)
 {
